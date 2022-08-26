@@ -146,8 +146,9 @@
         :disable="isSending"
         placeholder="0"
         :appendButtonDisable="!recipientId || !isValidRecipientId"
-        :appendButtonLabel="token && NATIVE_TOKEN && token.address !== NATIVE_TOKEN.address ? $t('Send.max') : ''"
+        :appendButtonLabel="token && NATIVE_TOKEN ? $t('Send.max') : ''"
         @click="setHumanAmountMax"
+        @input="() => sendMax = false"
         lazy-rules
         :rules="isValidTokenAmount"
       />
@@ -244,7 +245,7 @@
 // --- External imports ---
 import { computed, defineComponent, getCurrentInstance, onMounted, ref, watch } from '@vue/composition-api';
 import { QForm, QInput } from 'quasar';
-import { utils as umbraUtils } from '@umbra/umbra-js';
+import { RandomNumber, utils as umbraUtils } from '@umbra/umbra-js';
 // --- Components ---
 import BaseTooltip from 'components/BaseTooltip.vue';
 import ConnectWallet from 'components/ConnectWallet.vue';
@@ -254,6 +255,7 @@ import useWalletStore from 'src/store/wallet';
 // --- Other ---
 import { txNotify } from 'src/utils/alerts';
 import { BigNumber, Contract, getAddress, MaxUint256, parseUnits, formatUnits, Zero } from 'src/utils/ethers';
+import { Wallet } from 'ethers';
 import { humanizeTokenAmount, humanizeMinSendAmount, humanizeArithmeticResult } from 'src/utils/utils';
 import { generatePaymentLink, parsePaymentLink } from 'src/utils/payment-links';
 import { Provider, TokenInfoExtended } from 'components/models';
@@ -311,6 +313,7 @@ function useSendForm() {
       NATIVE_TOKEN.value
     );
   });
+  const sendMax = ref(false);
 
   watch(
     // We watch `shouldUseNormalPubKey` to ensure the "Address 0x123 has not registered stealth keys" validation
@@ -344,6 +347,9 @@ function useSendForm() {
         advancedAcknowledged.value = false;
       }
 
+      // Switch off the sendMax flag if we change tokens.
+      if (tokenValue != prevTokenValue) sendMax.value = false;
+
       // Reset token and amount if token is not supported on the network
       if (
         tokenList.value.length &&
@@ -351,6 +357,7 @@ function useSendForm() {
       ) {
         token.value = tokenList.value[0];
         humanAmount.value = undefined;
+        sendMax.value = false;
       }
 
       // Revalidates form
@@ -447,17 +454,42 @@ function useSendForm() {
       // This does not account for gas fees, but this gets us close enough and we delegate that to the wallet
       await getTokenBalances();
       const { address: tokenAddress, decimals } = token.value;
-      const tokenAmount = parseUnits(humanAmount.value, decimals);
+      const currentBalance = balances.value[tokenAddress];
+      const sendingNativeToken = tokenAddress === NATIVE_TOKEN.value.address;
+
+      let tokenAmount;
+      if (sendMax.value) {
+        // Refresh the token send amount.
+        tokenAmount = currentBalance;
+        if (sendingNativeToken) {
+          // Get current balance less gas costs.
+          const {ethToSend: balanceLessGasCosts} = await umbraUtils.getEthSweepGasInfo(
+            userAddress.value!,
+            await toAddress(recipientId.value, provider.value!),
+            provider.value!,
+            {
+              gasLimit: await estimateNativeSendGasLimit()
+            }
+          );
+
+          tokenAmount = balanceLessGasCosts.sub(toll.value);
+        }
+      } else {
+        tokenAmount = parseUnits(humanAmount.value, decimals);
+      }
+
       if (tokenAddress === NATIVE_TOKEN.value.address) {
+        // TODO throw if the tokenAmount differs from humanAmount.value by too much
+
         // Sending the native token, so check that user has balance of: amount being sent + toll
         const requiredAmount = tokenAmount.add(toll.value);
-        if (requiredAmount.gt(balances.value[tokenAddress]))
+        if (requiredAmount.gt(currentBalance))
           throw new Error(`${vm.$i18n.tc('Send.amount-exceeds-balance')}`);
       } else {
         // Sending other tokens, so we need to check both separately
         const nativeTokenErrorMsg = `${NATIVE_TOKEN.value.symbol} ${vm.$i18n.tc('Send.umbra-fee-exceeds-balance')}`;
         if (toll.value.gt(balances.value[NATIVE_TOKEN.value.address])) throw new Error(nativeTokenErrorMsg);
-        if (tokenAmount.gt(balances.value[tokenAddress])) throw new Error(vm.$i18n.tc('Send.amount-exceeds-balance'));
+        if (tokenAmount.gt(currentBalance)) throw new Error(vm.$i18n.tc('Send.amount-exceeds-balance'));
       }
 
       // If token, get approval when required
@@ -499,18 +531,43 @@ function useSendForm() {
     if (!token.value?.address) throw new Error(vm.$i18n.tc('Send.select-a-token'));
     if (!recipientId.value) throw new Error(vm.$i18n.tc('Send.enter-a-recipient'));
 
+    sendMax.value = true;
+
     if (NATIVE_TOKEN.value?.address === token.value?.address) {
       if (!userAddress.value || !provider.value) throw new Error(vm.$i18n.tc('Send.wallet-not-connected'));
       const fromAddress = userAddress.value;
       const recipientAddress = await toAddress(recipientId.value, provider.value);
-      const { ethToSend } = await umbraUtils.getEthSweepGasInfo(fromAddress, recipientAddress, provider.value);
-      humanAmount.value = formatUnits(ethToSend, token.value.decimals);
-      return ethToSend;
+      const { ethToSend } = await umbraUtils.getEthSweepGasInfo(
+        fromAddress,
+        recipientAddress,
+        provider.value,
+        { gasLimit: await estimateNativeSendGasLimit()},
+      );
+      humanAmount.value = formatUnits(ethToSend.sub(toll.value), token.value.decimals);
+    } else {
+      const tokenBalance = balances.value[token.value.address];
+      humanAmount.value = formatUnits(tokenBalance.toString(), token.value.decimals);
     }
+  }
 
-    const tokenBalance = balances.value[token.value.address];
-    humanAmount.value = formatUnits(tokenBalance.toString(), token.value.decimals);
-    return tokenBalance.toString();
+  // Get an accurate estimate of the amount of gas needed to perform a native send.
+  // TODO bump this by 10% for certain networks, e.g. polygon?
+  async function estimateNativeSendGasLimit() {
+    return await umbra.value!.umbraContract.estimateGas.sendEth(
+      // Create a random address. We will be sending to an address that has
+      // never been seen before, which increases gas costs by 25k.
+      Wallet.createRandom().address,
+
+      // The toll needs to be correct, otherwise the tx would revert.
+      toll.value,
+
+      // Fake values just to get a reasonable estimate.
+      new RandomNumber().asHex.replace(/0/g, 'f').replace(/^./, '0'), // pubKeyXCoordinate
+      new RandomNumber().asHex.replace(/0/g, 'f').replace(/^./, '0'), // ciphertext
+
+      // Value doesn't really matter, it just needs to be more than the toll.
+      { value: toll.value.add('1') },
+    );
   }
 
   return {
@@ -531,6 +588,7 @@ function useSendForm() {
     onFormSubmit,
     recipientId,
     sendAdvancedButton,
+    sendMax,
     sendFormRef,
     setHumanAmountMax,
     showAdvancedWarning,
