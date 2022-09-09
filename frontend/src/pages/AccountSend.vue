@@ -148,7 +148,7 @@
         :appendButtonDisable="!recipientId || !isValidRecipientId"
         :appendButtonLabel="token && NATIVE_TOKEN ? $t('Send.max') : ''"
         @click="setHumanAmountMax"
-        @input="() => sendMax = false"
+        @input="() => (sendMax = false)"
         lazy-rules
         :rules="isValidTokenAmount"
       />
@@ -463,12 +463,12 @@ function useSendForm() {
         tokenAmount = currentBalance;
         if (sendingNativeToken) {
           // Get current balance less gas costs.
-          const {ethToSend: balanceLessGasCosts} = await umbraUtils.getEthSweepGasInfo(
+          const { ethToSend: balanceLessGasCosts } = await umbraUtils.getEthSweepGasInfo(
             userAddress.value!,
             await toAddress(recipientId.value, provider.value!),
             provider.value!,
             {
-              gasLimit: await estimateNativeSendGasLimit()
+              gasLimit: await estimateNativeSendGasLimit(),
             }
           );
 
@@ -481,13 +481,13 @@ function useSendForm() {
       if (tokenAddress === NATIVE_TOKEN.value.address) {
         // Throw if the tokenAmount differs from humanAmount.value by too much.
         const expectedAmount = parseUnits(humanAmount.value, decimals);
-        if (tokenAmount.mul('100').div(expectedAmount).lt('95')) // 5% slippage is tolerated.
+        if (tokenAmount.mul('100').div(expectedAmount).lt('95'))
+          // 5% slippage is tolerated.
           throw new Error(`${vm.$i18n.tc('Send.slippage-exceeded')}`);
 
         // Sending the native token, so check that user has balance of: amount being sent + toll
         const requiredAmount = tokenAmount.add(toll.value);
-        if (requiredAmount.gt(currentBalance))
-          throw new Error(`${vm.$i18n.tc('Send.amount-exceeds-balance')}`);
+        if (requiredAmount.gt(currentBalance)) throw new Error(`${vm.$i18n.tc('Send.amount-exceeds-balance')}`);
       } else {
         // Sending other tokens, so we need to check both separately
         const nativeTokenErrorMsg = `${NATIVE_TOKEN.value.symbol} ${vm.$i18n.tc('Send.umbra-fee-exceeds-balance')}`;
@@ -540,12 +540,9 @@ function useSendForm() {
       if (!userAddress.value || !provider.value) throw new Error(vm.$i18n.tc('Send.wallet-not-connected'));
       const fromAddress = userAddress.value;
       const recipientAddress = await toAddress(recipientId.value, provider.value);
-      const { ethToSend } = await umbraUtils.getEthSweepGasInfo(
-        fromAddress,
-        recipientAddress,
-        provider.value,
-        { gasLimit: await estimateNativeSendGasLimit()},
-      );
+      const { ethToSend } = await umbraUtils.getEthSweepGasInfo(fromAddress, recipientAddress, provider.value, {
+        gasLimit: await estimateNativeSendGasLimit(),
+      });
       humanAmount.value = formatUnits(ethToSend.sub(toll.value), token.value.decimals);
     } else {
       const tokenBalance = balances.value[token.value.address];
@@ -558,21 +555,25 @@ function useSendForm() {
     // Increase estimate by 10% to give us some wiggle room if network conditions are volatile.
     const scaleFactor = '110';
 
-    return (await umbra.value!.umbraContract.estimateGas.sendEth(
-      // Create a random address. We will be sending to an address that has
-      // never been seen before, which increases gas costs by 25k.
-      Wallet.createRandom().address,
+    return (
+      await umbra.value!.umbraContract.estimateGas.sendEth(
+        // Create a random address. We will be sending to an address that has
+        // never been seen before, which increases gas costs by 25k.
+        Wallet.createRandom().address,
 
-      // The toll needs to be correct, otherwise the tx would revert.
-      toll.value,
+        // The toll needs to be correct, otherwise the tx would revert.
+        toll.value,
 
-      // Fake values just to get a reasonable estimate.
-      new RandomNumber().asHex.replace(/0/g, 'f').replace(/^./, '0'), // pubKeyXCoordinate
-      new RandomNumber().asHex.replace(/0/g, 'f').replace(/^./, '0'), // ciphertext
+        // Fake values just to get a reasonable estimate.
+        new RandomNumber().asHex.replace(/0/g, 'f').replace(/^./, '0'), // pubKeyXCoordinate
+        new RandomNumber().asHex.replace(/0/g, 'f').replace(/^./, '0'), // ciphertext
 
-      // Value doesn't really matter, it just needs to be more than the toll.
-      { value: toll.value.add('1') },
-    )).mul(scaleFactor).div('100');
+        // Value doesn't really matter, it just needs to be more than the toll.
+        { value: toll.value.add('1') }
+      )
+    )
+      .mul(scaleFactor)
+      .div('100');
   }
 
   return {
