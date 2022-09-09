@@ -554,9 +554,11 @@ function useSendForm() {
   }
 
   // Get an accurate estimate of the amount of gas needed to perform a native send.
-  // TODO bump this by 10% for certain networks, e.g. polygon?
   async function estimateNativeSendGasLimit() {
-    return await umbra.value!.umbraContract.estimateGas.sendEth(
+    // Increase estimate by 10% to give us some wiggle room if network conditions are volatile.
+    const scaleFactor = '110';
+
+    return (await umbra.value!.umbraContract.estimateGas.sendEth(
       // Create a random address. We will be sending to an address that has
       // never been seen before, which increases gas costs by 25k.
       Wallet.createRandom().address,
@@ -570,7 +572,7 @@ function useSendForm() {
 
       // Value doesn't really matter, it just needs to be more than the toll.
       { value: toll.value.add('1') },
-    );
+    )).mul(scaleFactor).div('100');
   }
 
   return {
