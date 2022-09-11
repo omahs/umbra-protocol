@@ -481,8 +481,8 @@ function useSendForm() {
       if (tokenAddress === NATIVE_TOKEN.value.address) {
         // Throw if the tokenAmount differs from humanAmount.value by too much.
         const expectedAmount = parseUnits(humanAmount.value, decimals);
-        if (tokenAmount.mul('100').div(expectedAmount).lt('95'))
-          // 5% slippage is tolerated.
+        // Only 2% downward slippage is tolerated. Any more and we throw.
+        if (tokenAmount.mul('100').div(expectedAmount).lt('98'))
           throw new Error(`${vm.$i18n.tc('Send.slippage-exceeded')}`);
 
         // Sending the native token, so check that user has balance of: amount being sent + toll
