@@ -456,11 +456,10 @@ function useSendForm() {
       const { address: tokenAddress, decimals } = token.value;
       const currentBalance = balances.value[tokenAddress];
       const sendingNativeToken = tokenAddress === NATIVE_TOKEN.value.address;
+      let tokenAmount = parseUnits(humanAmount.value, decimals);
 
-      let tokenAmount;
+      // Refresh the tokenAmount if the sendMax flag is set.
       if (sendMax.value) {
-        // Refresh the token send amount.
-        tokenAmount = currentBalance;
         if (sendingNativeToken) {
           // Get current balance less gas costs.
           const { ethToSend: balanceLessGasCosts } = await umbraUtils.getEthSweepGasInfo(
@@ -473,9 +472,9 @@ function useSendForm() {
           );
 
           tokenAmount = balanceLessGasCosts.sub(toll.value);
+        } else {
+          tokenAmount = currentBalance;
         }
-      } else {
-        tokenAmount = parseUnits(humanAmount.value, decimals);
       }
 
       if (tokenAddress === NATIVE_TOKEN.value.address) {
