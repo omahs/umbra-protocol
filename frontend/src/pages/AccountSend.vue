@@ -557,8 +557,10 @@ function useSendForm() {
 
     return (
       await umbra.value!.umbraContract.estimateGas.sendEth(
-        // Create a random address. We will be sending to an address that has
-        // never been seen before, which increases gas costs by 25k.
+        // We will be sending to an address that has never been seen before, which increases gas
+        // costs by 25k. To ensure this cost is included in our gas limit estimate, we estimate
+        // using a `to` address that is randomly generated (and thus likely to have never been seen
+        // before).
         Wallet.createRandom().address,
 
         // The toll needs to be correct, otherwise the tx would revert.
