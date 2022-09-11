@@ -551,8 +551,15 @@ function useSendForm() {
 
   // Get an accurate estimate of the amount of gas needed to perform a native send.
   async function estimateNativeSendGasLimit() {
-    // Increase estimate by 10% to give us some wiggle room if network conditions are volatile.
-    const scaleFactor = '110';
+    // Increase estimate to give us some wiggle room if network conditions are volatile.
+    let scaleFactor;
+    switch (chainId.value) {
+      case 137:
+        scaleFactor = '120';
+        break;
+      default:
+        scaleFactor = '110';
+    }
 
     return (
       await umbra.value!.umbraContract.estimateGas.sendEth(
