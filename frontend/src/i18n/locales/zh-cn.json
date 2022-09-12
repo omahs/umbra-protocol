@@ -62,6 +62,7 @@
     "question-circle-warning": "除非您知道自己在做什么，不要使用此功能。",
     "learn-more": "了解更多",
     "select-token": "选择要发送的代币",
+    "slippage-exceeded": "Actual send amount would materially differ from estimate due to changing gas prices. Please try again.",
     "token": "代币",
     "amount": "汇款金额",
     "summary": "总结",
