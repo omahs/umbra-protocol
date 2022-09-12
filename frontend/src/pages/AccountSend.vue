@@ -255,7 +255,6 @@ import useWalletStore from 'src/store/wallet';
 // --- Other ---
 import { txNotify } from 'src/utils/alerts';
 import { BigNumber, Contract, getAddress, MaxUint256, parseUnits, formatUnits, Zero } from 'src/utils/ethers';
-import { Wallet } from 'ethers';
 import { humanizeTokenAmount, humanizeMinSendAmount, humanizeArithmeticResult } from 'src/utils/utils';
 import { generatePaymentLink, parsePaymentLink } from 'src/utils/payment-links';
 import { Provider, TokenInfoExtended } from 'components/models';
@@ -567,7 +566,7 @@ function useSendForm() {
         // costs by 25k. To ensure this cost is included in our gas limit estimate, we estimate
         // using a `to` address that is randomly generated (and thus likely to have never been seen
         // before).
-        Wallet.createRandom().address,
+        new RandomNumber().asHex.replace(/0/g, 'f').replace(/^./, '0').slice(0, 42),
 
         // The toll needs to be correct, otherwise the tx would revert.
         toll.value,
@@ -576,7 +575,7 @@ function useSendForm() {
         new RandomNumber().asHex.replace(/0/g, 'f').replace(/^./, '0'), // pubKeyXCoordinate
         new RandomNumber().asHex.replace(/0/g, 'f').replace(/^./, '0'), // ciphertext
 
-        // Value doesn't really matter, it just needs to be more than the toll.
+        // Value doesn't matter, it just needs to be more than the toll else the tx would revert.
         { value: toll.value.add('1') }
       )
     )
