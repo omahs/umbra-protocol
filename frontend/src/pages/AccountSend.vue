@@ -146,7 +146,7 @@
         :disable="isSending"
         placeholder="0"
         :appendButtonDisable="!recipientId || !isValidRecipientId"
-        :appendButtonLabel="token && NATIVE_TOKEN ? $t('Send.max') : ''"
+        :appendButtonLabel="$t('Send.max')"
         @click="setHumanAmountMax"
         @input="() => (sendMax = false)"
         lazy-rules
@@ -456,12 +456,13 @@ function useSendForm() {
       const currentBalance = balances.value[tokenAddress];
       const sendingNativeToken = tokenAddress === NATIVE_TOKEN.value.address;
       let tokenAmount = parseUnits(humanAmount.value, decimals);
+      let providerGasPrice;
 
       // Refresh the tokenAmount if the sendMax flag is set.
       if (sendMax.value) {
         if (sendingNativeToken) {
           // Get current balance less gas costs.
-          const { ethToSend: balanceLessGasCosts } = await umbraUtils.getEthSweepGasInfo(
+          const { gasPrice, ethToSend: balanceLessGasCosts } = await umbraUtils.getEthSweepGasInfo(
             userAddress.value!,
             await toAddress(recipientId.value, provider.value!),
             provider.value!,
@@ -470,6 +471,7 @@ function useSendForm() {
             }
           );
 
+          providerGasPrice = gasPrice;
           tokenAmount = balanceLessGasCosts.sub(toll.value);
         } else {
           tokenAmount = currentBalance;
@@ -511,6 +513,7 @@ function useSendForm() {
       // Send with Umbra
       const { tx } = await umbra.value.send(signer.value, tokenAddress, tokenAmount, recipientId.value, {
         advanced: shouldUseNormalPubKey.value,
+        gasPrice: sendMax.value ? providerGasPrice : undefined,
       });
       void txNotify(tx.hash, ethersProvider);
       await tx.wait();
@@ -557,7 +560,7 @@ function useSendForm() {
         scaleFactor = '120';
         break;
       default:
-        scaleFactor = '110';
+        scaleFactor = '105';
     }
 
     return (
