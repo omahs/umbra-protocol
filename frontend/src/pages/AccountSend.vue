@@ -456,22 +456,27 @@ function useSendForm() {
       const currentBalance = balances.value[tokenAddress];
       const sendingNativeToken = tokenAddress === NATIVE_TOKEN.value.address;
       let tokenAmount = parseUnits(humanAmount.value, decimals);
-      let providerGasPrice;
+
+      // Needed for transactions that are going to sendMax.
+      let preCalculatedGasPrice;
 
       // Refresh the tokenAmount if the sendMax flag is set.
       if (sendMax.value) {
         if (sendingNativeToken) {
+          // Add a 5% buffer to the gasPrice to avoid: "max fee per gas less than block base fee"
+          preCalculatedGasPrice = (await provider.value!.getGasPrice()).mul('105').div('100');
+
           // Get current balance less gas costs.
-          const { gasPrice, ethToSend: balanceLessGasCosts } = await umbraUtils.getEthSweepGasInfo(
+          const { ethToSend: balanceLessGasCosts } = await umbraUtils.getEthSweepGasInfo(
             userAddress.value!,
             await toAddress(recipientId.value, provider.value!),
             provider.value!,
             {
               gasLimit: await estimateNativeSendGasLimit(),
+              gasPrice: preCalculatedGasPrice,
             }
           );
 
-          providerGasPrice = gasPrice;
           tokenAmount = balanceLessGasCosts.sub(toll.value);
         } else {
           tokenAmount = currentBalance;
@@ -513,7 +518,7 @@ function useSendForm() {
       // Send with Umbra
       const { tx } = await umbra.value.send(signer.value, tokenAddress, tokenAmount, recipientId.value, {
         advanced: shouldUseNormalPubKey.value,
-        gasPrice: sendMax.value ? providerGasPrice : undefined,
+        gasPrice: sendMax.value ? preCalculatedGasPrice : undefined,
       });
       void txNotify(tx.hash, ethersProvider);
       await tx.wait();
