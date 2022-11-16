@@ -463,16 +463,22 @@ function useSendForm() {
       // Refresh the tokenAmount if the sendMax flag is set.
       if (sendMax.value) {
         if (sendingNativeToken) {
+          const [_getGasPrice, _toAddress, _estimatedNativeSendGasLimit] = await Promise.all([
+            provider.value!.getGasPrice(),
+            toAddress(recipientId.value, provider.value!),
+            estimateNativeSendGasLimit(),
+          ]);
+
           // Add a 5% buffer to the gasPrice to avoid: "max fee per gas less than block base fee"
-          preCalculatedGasPrice = (await provider.value!.getGasPrice()).mul('105').div('100');
+          preCalculatedGasPrice = _getGasPrice.mul('105').div('100');
 
           // Get current balance less gas costs.
           const { ethToSend: balanceLessGasCosts } = await umbraUtils.getEthSweepGasInfo(
             userAddress.value!,
-            await toAddress(recipientId.value, provider.value!),
+            _toAddress,
             provider.value!,
             {
-              gasLimit: await estimateNativeSendGasLimit(),
+              gasLimit: _estimatedNativeSendGasLimit,
               gasPrice: preCalculatedGasPrice,
             }
           );
