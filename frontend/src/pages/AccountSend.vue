@@ -568,10 +568,15 @@ function useSendForm() {
   // Get an accurate estimate of the amount of gas needed to perform a native send.
   async function estimateNativeSendGasLimit() {
     // Increase estimate to give us some wiggle room if network conditions are volatile.
+    // These have each been configured on a case-by-case basis; do not change
+    // unless you have tested a native token Umbra send on the network with the new value.
     let scaleFactor;
     switch (chainId.value) {
       case 137:
         scaleFactor = '120';
+        break;
+      case 42161:
+        scaleFactor = '110';
         break;
       default:
         scaleFactor = '105';
