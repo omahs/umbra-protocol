@@ -478,6 +478,9 @@ function useSendForm() {
             _toAddress,
             provider.value!,
             {
+              // We override the gasLimit here because we are sending to an
+              // address that has never been seen before, which increases gas
+              // costs and is not accounted for by getEthSweepGasInfo.
               gasLimit: _estimatedNativeSendGasLimit,
               gasPrice: preCalculatedGasPrice,
             }
