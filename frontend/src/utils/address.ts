@@ -99,14 +99,22 @@ export const isAddressSafe = async (name: string, userAddress: string, stealthAd
 
   // Get the address the provided name/address resolves to
   const destinationAddress = isDomain ? await utils.toAddress(name, provider) : getAddress(name);
+  const promises = [];
 
   // If input was an address, check if address resolves to an ENS or CNS name
+  //
+  // These can be batched
   if (!isDomain) {
-    const ensName = await lookupEnsName(destinationAddress, MAINNET_PROVIDER as Web3Provider);
-    if (ensName) reasons.push(`${i18n.tc('Utils.Address.name-resolves-to-ens')} ${ensName}`);
-
-    const cnsName = await lookupCnsName(destinationAddress);
-    if (cnsName) reasons.push(`${i18n.tc('Utils.Address.name-resolves-to-cns')} ${cnsName}`);
+    const ensCheck = async () => {
+      const ensName = await lookupEnsName(destinationAddress, MAINNET_PROVIDER as Web3Provider);
+      if (ensName) reasons.push(`${i18n.tc('Utils.Address.name-resolves-to-ens')} ${ensName}`);
+    };
+    const cnsCheck = async () => {
+      const cnsName = await lookupCnsName(destinationAddress);
+      if (cnsName) reasons.push(`${i18n.tc('Utils.Address.name-resolves-to-cns')} ${cnsName}`);
+    };
+    promises.push(ensCheck());
+    promises.push(cnsCheck());
   }
 
   // Check if address is the wallet user is logged in with
@@ -115,21 +123,35 @@ export const isAddressSafe = async (name: string, userAddress: string, stealthAd
   // Check if the address is the stealth address that was sent funds
   if (destinationAddress.toLowerCase() === stealthAddress.toLowerCase()) reasons.push(`${i18n.tc('Utils.Address.it')} ${isDomain ? i18n.tc('Utils.Address.resolves-to') : i18n.tc('Utils.Address.is')} ${i18n.tc('Utils.Address.same-addr-as-stealth')}`); // prettier-ignore
 
+  // batch calls has POAPS,
+  //
   // Check if address owns any POAPs
-  if (await hasPOAPs(destinationAddress)) reasons.push(`${isDomain ? i18n.tc('Utils.Address.address-it-resolves-to') : i18n.tc('Utils.Address.it')} ${i18n.tc('Utils.Address.has-poap-tokens')}`); // prettier-ignore
-
+  const hasPOAPsCheck = async () => {
+    const has = await hasPOAPs(destinationAddress);
+    if (has) reasons.push(`${isDomain ? i18n.tc('Utils.Address.address-it-resolves-to') : i18n.tc('Utils.Address.it')} ${i18n.tc('Utils.Address.has-poap-tokens')}`); // prettier-ignore
+  };
+  promises.push(hasPOAPsCheck());
   // Check if address has contributed to Gitcoin Grants
   // TODO
 
   // If we're withdrawing to an ENS name, and if we're not on L1, and if the L1 address it resolves to is a contract,
   // warn that the contract may not exist or may not be the same contract on
-  const { chainId } = await provider.getNetwork();
-  if (isDomain && chainId !== 1) {
-    const code = await MAINNET_PROVIDER.getCode(destinationAddress);
-    if (code !== '0x') {
-      const networkName = getChainById(chainId)?.chainName as string;
-      reasons.push(`It resolves to address <span class="code">${destinationAddress}</span>. This resolution is done via mainnet, but you are withdrawing on ${networkName}. This address contains a contract on mainnet, and <span class="text-bold">that same contract may not exist on ${networkName}</span>`); // prettier-ignore
+  const contractENSCheck = async () => {
+    const { chainId } = await provider.getNetwork();
+    if (isDomain && chainId !== 1) {
+      const code = await MAINNET_PROVIDER.getCode(destinationAddress);
+      if (code !== '0x') {
+        const networkName = getChainById(chainId)?.chainName as string;
+        reasons.push(`It resolves to address <span class="code">${destinationAddress}</span>. This resolution is done via mainnet, but you are withdrawing on ${networkName}. This address contains a contract on mainnet, and <span class="text-bold">that same contract may not exist on ${networkName}</span>`); // prettier-ignore
+      }
     }
+  };
+  promises.push(contractENSCheck());
+
+  try {
+    await Promise.all(promises);
+  } catch (err) {
+    console.error(err);
   }
 
   return { safe: reasons.length === 0, reasons };
